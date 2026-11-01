@@ -1,0 +1,151 @@
+# serval-emu: builds the debugger's emulator for Serval Engine games
+# (SERVAL.md) for Linux, Windows and macOS, runs Serval Engine's debug link
+# tests against it on Linux, and on a tag serval-emu-vX.Y.Z attaches the
+# packages to a draft GitHub release.
+name: serval-emu
+
+on:
+  push:
+    branches: [serval]
+    tags: ["serval-emu-v*"]
+  pull_request:
+    branches: [serval]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SDL_VERSION: 2.30.9
+  # mGBA's options for serval-emu: the GBA core and what the debugger needs,
+  # nothing under the LGPL or GPL (no FFmpeg, no libelf, no libedit), no
+  # other frontend, everything else vendored and static.
+  MGBA_OPTIONS: >-
+    -DBUILD_SERVAL=ON -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
+    -DM_CORE_GB=OFF -DUSE_FFMPEG=OFF -DUSE_ELF=OFF -DUSE_EDITLINE=OFF -DUSE_DISCORD_RPC=OFF
+    -DUSE_LUA=OFF -DENABLE_SCRIPTING=OFF -DUSE_FREETYPE=OFF -DUSE_JSON_C=OFF -DUSE_LIBZIP=OFF
+    -DUSE_MINIZIP=OFF -DUSE_LZMA=OFF -DUSE_SQLITE3=OFF -DUSE_EPOXY=OFF -DUSE_ZLIB=ON -DUSE_PNG=ON
+    -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON -DCMAKE_DISABLE_FIND_PACKAGE_PNG=ON
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, platform: linux-x64 }
+          - { os: windows-2022, platform: windows-x64 }
+          - { os: macos-14, platform: macos-universal }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # mGBA's version.cmake reads the history
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+
+      - name: Tools
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update
+            # SDL loads these at run time; it needs their headers to build.
+            sudo apt-get install -y ninja-build libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+              libxi-dev libxss-dev libxkbcommon-dev libwayland-dev libdecor-0-dev libasound2-dev \
+              libpulse-dev libudev-dev libdbus-1-dev
+          elif [ "$RUNNER_OS" = macOS ]; then
+            brew install ninja
+          else
+            choco install ninja --no-progress
+          fi
+
+      - name: SDL2 (static, from source)
+        run: |
+          curl -fsSL -o sdl.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL2-$SDL_VERSION.tar.gz"
+          tar xzf sdl.tar.gz
+          extra=""
+          if [ "$RUNNER_OS" = macOS ]; then extra='-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'; fi
+          cmake -S "SDL2-$SDL_VERSION" -B sdl-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DSDL_STATIC_PIC=ON \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl" $extra
+          cmake --build sdl-build
+          cmake --install sdl-build
+
+      - name: Build
+        run: |
+          extra=""
+          if [ "$RUNNER_OS" = macOS ]; then extra='-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'; fi
+          if [ "$RUNNER_OS" = Windows ]; then extra='-DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'; fi
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo $MGBA_OPTIONS \
+            -DCMAKE_PREFIX_PATH="$PWD/sdl" $extra
+          cmake --build build --target serval-emu
+          exe=build/serval/serval-emu; [ "$RUNNER_OS" = Windows ] && exe=build/serval/serval-emu.exe
+          "$exe" --version
+
+      - name: Package
+        run: |
+          version=$(sed -n 's/^#define SERVAL_EMU_VERSION "\(.*\)"/\1/p' src/platform/serval/main.c)
+          if [[ "$GITHUB_REF" == refs/tags/serval-emu-v* && "${GITHUB_REF#refs/tags/serval-emu-v}" != "$version" ]]; then
+            echo "the tag says ${GITHUB_REF#refs/tags/serval-emu-v}, main.c's SERVAL_EMU_VERSION says $version"; exit 1
+          fi
+          name="serval-emu-$version-${{ matrix.platform }}"
+          mkdir -p "dist/$name"
+          if [ "$RUNNER_OS" = Windows ]; then cp build/serval/serval-emu.exe "dist/$name/"; else cp build/serval/serval-emu "dist/$name/"; fi
+          if [ "$RUNNER_OS" = Linux ]; then strip "dist/$name/serval-emu"; fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            strip -x "dist/$name/serval-emu"
+            codesign --force --sign - "dist/$name/serval-emu" # ad hoc: Studio Advance signs its own copy
+            lipo -info "dist/$name/serval-emu"
+          fi
+          cp LICENSE "dist/$name/LICENSE-MPL-2.0.txt"
+          cp SERVAL.md "dist/$name/SERVAL.md"
+          cp src/platform/serval/NOTICES.md "dist/$name/NOTICES.md"
+          cp "SDL2-$SDL_VERSION/LICENSE.txt" "dist/$name/LICENSE-SDL2.txt"
+          printf 'serval-emu %s\nSource: %s/%s/tree/%s\n' "$version" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SHA" > "dist/$name/SOURCE.txt"
+          cd dist
+          if [ "$RUNNER_OS" = Windows ]; then 7z a "$name.zip" "$name" > /dev/null; else zip -qr "$name.zip" "$name"; fi
+          echo "PACKAGE=dist/$name.zip" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: serval-emu-${{ matrix.platform }}
+          path: ${{ env.PACKAGE }}
+
+      # The debug link end to end: Serval Engine's fireflies, built for debug,
+      # debugged in this serval-emu by its tools/svlink_test.py (CTest
+      # svlink_emu_e2e): handshake, inspection, breakpoints, steps, hot
+      # reload, and a release ROM that never rings.
+      - name: Serval Engine's debug link tests
+        if: runner.os == 'Linux'
+        run: |
+          git clone --depth 1 https://github.com/StevenGann/Serval-Engine.git engine
+          engine/tools/setup-dev.sh --prefix "$HOME/opt" --no-web --no-rom-tests
+          . "$HOME/opt/serval-env.sh"
+          cmake -S engine -B engine/build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/engine/cmake/arm-gba-toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Debug -DSERVAL_EMU="$PWD/build/serval/serval-emu"
+          cmake --build engine/build
+          ctest --test-dir engine/build -R svlink --output-on-failure
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/serval-emu-v')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum *.zip > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref, '-rc') }}
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS

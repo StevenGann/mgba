@@ -124,6 +124,7 @@ struct GBA {
 
 	bool debug;
 	char debugString[0x100];
+	struct GBAServalLink* servalLink; // Serval Engine's debug link, serval-link.h
 	GBADebugFlags debugFlags;
 };
 

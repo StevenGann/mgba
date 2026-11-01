@@ -74,6 +74,7 @@ if(NOT LIBMGBA_ONLY)
 	set(BUILD_SUITE OFF CACHE BOOL "Build test suite")
 	set(BUILD_CINEMA OFF CACHE BOOL "Build video tests suite")
 	set(BUILD_HEADLESS OFF CACHE BOOL "Build headless tool")
+	set(BUILD_SERVAL OFF CACHE BOOL "Build serval-emu, the debugger's emulator for Serval Engine games")
 	set(BUILD_EXAMPLE OFF CACHE BOOL "Build example frontends")
 	set(BUILD_PYTHON OFF CACHE BOOL "Build Python bindings")
 	set(BUILD_STATIC OFF CACHE BOOL "Build a static library")
@@ -1072,6 +1073,10 @@ endif()
 
 if(BUILD_QT)
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/platform/qt ${CMAKE_CURRENT_BINARY_DIR}/qt)
+endif()
+
+if(BUILD_SERVAL)
+	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/platform/serval ${CMAKE_CURRENT_BINARY_DIR}/serval)
 endif()
 
 if(BUILD_HEADLESS)

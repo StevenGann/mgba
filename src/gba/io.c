@@ -5,6 +5,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <mgba/internal/gba/io.h>
 
+#include <mgba/internal/gba/serval-link.h>
+
 #include <mgba/internal/arm/macros.h>
 #include <mgba/internal/gba/dma.h>
 #include <mgba/internal/gba/gba.h>
@@ -558,6 +560,12 @@ void GBAIOWrite(struct GBA* gba, uint32_t address, uint16_t value) {
 			return;
 		}
 		// Fall through
+	case GBA_REG_SERVAL_LINK_PRESENCE:
+		if (address == GBA_REG_SERVAL_LINK_PRESENCE && gba->servalLink) {
+			gba->servalLink->asked = value == GBA_SERVAL_LINK_ASK;
+			return;
+		}
+		// Fall through
 	default:
 		if (address >= GBA_REG_DEBUG_STRING && address - GBA_REG_DEBUG_STRING < sizeof(gba->debugString)) {
 			STORE_16LE(value, address - GBA_REG_DEBUG_STRING, gba->debugString);
@@ -718,6 +726,12 @@ void GBAIOWrite32(struct GBA* gba, uint32_t address, uint32_t value) {
 	case GBA_REG_DMA3DAD_LO:
 		value = GBADMAWriteDAD(gba, 3, value);
 		break;
+	case GBA_REG_SERVAL_LINK_DOORBELL:
+		if (gba->servalLink) {
+			gba->servalLink->ring(gba->servalLink, gba, value);
+			return;
+		}
+		// Fall through
 	default:
 		if (address >= GBA_REG_DEBUG_STRING && address - GBA_REG_DEBUG_STRING < sizeof(gba->debugString)) {
 			STORE_32LE(value, address - GBA_REG_DEBUG_STRING, gba->debugString);
@@ -990,6 +1004,11 @@ uint16_t GBAIORead(struct GBA* gba, uint32_t address) {
 	case GBA_REG_DEBUG_ENABLE:
 		if (gba->debug) {
 			return 0x1DEA;
+		}
+		// Fall through
+	case GBA_REG_SERVAL_LINK_PRESENCE:
+		if (address == GBA_REG_SERVAL_LINK_PRESENCE && gba->servalLink && gba->servalLink->asked) {
+			return GBA_SERVAL_LINK_ANSWER;
 		}
 		// Fall through
 	default:

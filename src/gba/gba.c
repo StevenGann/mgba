@@ -74,6 +74,7 @@ static void GBAInit(void* cpu, struct mCPUComponent* component) {
 	gba->cpu = cpu;
 	gba->debugger = 0;
 	gba->sync = 0;
+	gba->servalLink = NULL;
 
 	GBAInterruptHandlerInit(&gba->cpu->irqh);
 	gba->cpu->cp[0].cdp = GBACP0Process;
