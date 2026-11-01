@@ -1,4 +1,8 @@
 # serval-emu: the debugger's emulator for Serval Engine games (SERVAL.md).
+if(APPLE)
+	# mGBA's top level sets 10.6; SDL 2 needs 10.7, and Apple Silicon 11.0.
+	set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
+endif()
 find_package(SDL2 CONFIG QUIET)
 if(NOT SDL2_FOUND)
 	find_package(SDL2 REQUIRED)

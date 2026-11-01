@@ -116,24 +116,35 @@ jobs:
           name: serval-emu-${{ matrix.platform }}
           path: ${{ env.PACKAGE }}
 
-      # The debug link end to end: Serval Engine's fireflies, built for debug,
-      # debugged in this serval-emu by its tools/svlink_test.py (CTest
-      # svlink_emu_e2e): handshake, inspection, breakpoints, steps, hot
-      # reload, and a release ROM that never rings.
+  # The debug link end to end: Serval Engine's fireflies, built for debug,
+  # debugged in the Linux package's serval-emu by its tools/svlink_test.py
+  # (CTest svlink_emu_e2e): handshake, inspection, breakpoints, steps, hot
+  # reload, and a release ROM that never rings. On the engine's own runner
+  # (its setup needs clang-format 18), with the binary built on 22.04.
+  engine-tests:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: serval-emu-linux-x64
+          path: dist
       - name: Serval Engine's debug link tests
-        if: runner.os == 'Linux'
         run: |
+          unzip -q dist/*.zip -d dist
+          emu=$(echo "$PWD"/dist/serval-emu-*/serval-emu)
+          "$emu" --version
           git clone --depth 1 https://github.com/StevenGann/Serval-Engine.git engine
           engine/tools/setup-dev.sh --prefix "$HOME/opt" --no-web --no-rom-tests
           . "$HOME/opt/serval-env.sh"
           cmake -S engine -B engine/build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/engine/cmake/arm-gba-toolchain.cmake" \
-            -DCMAKE_BUILD_TYPE=Debug -DSERVAL_EMU="$PWD/build/serval/serval-emu"
+            -DCMAKE_BUILD_TYPE=Debug -DSERVAL_EMU="$emu"
           cmake --build engine/build
           ctest --test-dir engine/build -R svlink --output-on-failure
 
   release:
-    needs: build
+    needs: [build, engine-tests]
     if: startsWith(github.ref, 'refs/tags/serval-emu-v')
     runs-on: ubuntu-22.04
     steps:
