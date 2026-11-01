@@ -19,13 +19,14 @@ env:
   SDL_VERSION: 2.30.9
   # mGBA's options for serval-emu: the GBA core and what the debugger needs,
   # nothing under the LGPL or GPL (no FFmpeg, no libelf, no libedit), no
-  # other frontend, everything else vendored and static.
+  # other frontend, no OpenGL (SDL's renderer draws) and no PNG. zlib is the
+  # system's where it has one (Linux, macOS), else mGBA's vendored copy.
   MGBA_OPTIONS: >-
     -DBUILD_SERVAL=ON -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_SHARED=OFF -DBUILD_STATIC=ON
     -DM_CORE_GB=OFF -DUSE_FFMPEG=OFF -DUSE_ELF=OFF -DUSE_EDITLINE=OFF -DUSE_DISCORD_RPC=OFF
     -DUSE_LUA=OFF -DENABLE_SCRIPTING=OFF -DUSE_FREETYPE=OFF -DUSE_JSON_C=OFF -DUSE_LIBZIP=OFF
-    -DUSE_MINIZIP=OFF -DUSE_LZMA=OFF -DUSE_SQLITE3=OFF -DUSE_EPOXY=OFF -DUSE_ZLIB=ON -DUSE_PNG=ON
-    -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON -DCMAKE_DISABLE_FIND_PACKAGE_PNG=ON
+    -DUSE_MINIZIP=OFF -DUSE_LZMA=OFF -DUSE_SQLITE3=OFF -DUSE_EPOXY=OFF -DUSE_PNG=OFF
+    -DBUILD_GL=OFF -DBUILD_GLES2=OFF -DBUILD_GLES3=OFF
 
 jobs:
   build:

@@ -22,7 +22,7 @@ stub and its debuggers are unchanged.
 | `include/mgba/internal/gba/gba.h`, `src/gba/gba.c` | **Modified.** `struct GBA` holds the hook (`servalLink`), `NULL` at start |
 | `src/platform/serval/link.c`, `link.h` | New. The endpoint: the TCP connection it dials to the debugger, the handshake, the endpoint's own messages (`READ_MEM`, `WRITE_MEM`, `MACHINE_PAUSE`, `MACHINE_RESUME`, `LOG`, `GAME_RESET`, `AGENT_FOUND`), and the agent's mailbox in EWRAM: the agent's frames carried both ways unread, the machine stopped right after the doorbell's write while the agent is parked, and run again only to deliver a request |
 | `src/platform/serval/main.c` | New. `serval-emu`: the SDL2 window, sound, keyboard and gamepads, frame pacing at the GBA's 59.73 frames a second, mGBA's log printed and forwarded as `LOG` |
-| `src/platform/serval/CMakeLists.txt`, `CMakeLists.txt` | New, and **modified**: the `BUILD_SERVAL` option (off by default) |
+| `src/platform/serval/CMakeLists.txt`, `CMakeLists.txt` | New, and **modified**: the `BUILD_SERVAL` option (off by default); on Windows, libepoxy required only by builds with OpenGL |
 | `.github/workflows/serval-emu.yml` | New. Builds for Linux, Windows and macOS (universal), runs Serval Engine's debug link tests against the build, and releases on a tag `serval-emu-vX.Y.Z` |
 
 As the MPL requires, the source of every file above, modified or new, is
@@ -68,14 +68,16 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBUILD_SERVAL=ON -DBUILD_QT=OFF -DBUILD_SDL=OFF -DM_CORE_GB=OFF \
   -DUSE_FFMPEG=OFF -DUSE_ELF=OFF -DUSE_EDITLINE=OFF -DUSE_DISCORD_RPC=OFF \
   -DUSE_LUA=OFF -DENABLE_SCRIPTING=OFF -DUSE_FREETYPE=OFF -DUSE_JSON_C=OFF \
-  -DUSE_LIBZIP=OFF -DUSE_MINIZIP=OFF -DUSE_LZMA=OFF -DUSE_SQLITE3=OFF -DUSE_EPOXY=OFF
+  -DUSE_LIBZIP=OFF -DUSE_MINIZIP=OFF -DUSE_LZMA=OFF -DUSE_SQLITE3=OFF -DUSE_EPOXY=OFF \
+  -DUSE_PNG=OFF -DBUILD_GL=OFF -DBUILD_GLES2=OFF -DBUILD_GLES3=OFF
 cmake --build build --target serval-emu
 ```
 
 The released builds turn off everything the debugger doesn't use, and every
 option that would bring in LGPL or GPL code (FFmpeg, libelf, libedit), so
-Studio Advance can ship `serval-emu` beside it. They link SDL 2 statically and
-use mGBA's vendored zlib and libpng (`.github/workflows/serval-emu.yml` has
+Studio Advance can ship `serval-emu` beside it, and OpenGL and PNG, which it
+doesn't use. They link SDL 2 statically, and zlib: the system's on Linux and
+macOS, mGBA's vendored copy on Windows (`.github/workflows/serval-emu.yml` has
 the exact options). `src/platform/serval/NOTICES.md` lists what a build
 contains.
 
